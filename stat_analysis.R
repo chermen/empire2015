@@ -2,12 +2,12 @@ setwd("~")
 
 library(foreign)
 library(bayesm)
+library(mcmcplots)
 library(memisc)
 library(pscl)
 library(lattice)
 library(effects)
 library(visreg)
-library(rgl)
 library(MASS)
 library(rsm)
 library(reshape2)
@@ -116,6 +116,14 @@ dat <- data.frame(g1_02 = rep(seq(from = min(ndat$g1_02),
 dat <- cbind(dat, predict(nb10, dat, type = "response", se.fit=T))
 
 
+library(akima)
+library(plot3D)
+wframe<-interp(dat$g1_02,dat$FOREST,dat$fit)
+persp3D(wframe$x,wframe$y,wframe$z)
+
+
+###Or
+
 visreg2d(nb10,  "FOREST", "g1_02", type=c("conditional"),
          trans=I, scale=c("response"), xlab=list(label="Deprivation"), 
          ylab="Mobilization",main="", zlab=list(label="Riots", cex=1, rot=90), phi = 15, theta = 60,    
@@ -123,43 +131,26 @@ visreg2d(nb10,  "FOREST", "g1_02", type=c("conditional"),
          cond=list(), print.cond=FALSE, whitespace=0.1)
 
         
+
+
+
         ###Bayesian models
         ###Using metropolis random walk alg from bayesm package
-        
-        ##
-        
-        simnegbin =
-          function(X, beta, alpha) {
-            #   Simulate from the Negative Binomial Regression
-            lambda = exp(X %*% beta)
-            y=NULL
-            for (j in 1:length(lambda))
-              y = c(y,rnbinom(1,mu = lambda[j],size = alpha))
-            return(y)
-          }
-        nobs = 200
-        n <- 200
-        x1 <- colsum$meanpop
-        x2 <- colsum$Urban
-        x3<- colsum$Elevation
-        x4<- colsum$Oil
-        x5<-colsum$Forest
-        x6<-colsum$Ethnicity
-        x7<- colsum$Ethnicity*colsum$Forest
-        
-        XX <- cbind(1,x1,x2,x3,x4,x5,x6,x7)
-        
+
+colsum$Population<-colsum$meanpop/10000
+colsum$Elevation<-colsum$elev/1000
+
+        nobs <- 200       # Number of observations
         nvar=8            # Number of X variables
-        alpha = 1
         Vbeta = diag(nvar)*0.01
-        
-        
+        colsum$interaction<-colsum$g1_02*colsum$FOREST # Interaction term
         
         # Construct the regdata (containing X)
         simnegbindata = NULL
         #beta = c(coefficients(nb6.4))
         beta<-c(0,0,0,0,0,0,0,0)
-        X = cbind(rep(1,nobs),colsum$Population,colsum$Urban,colsum$Elevation,colsum$Oil,   colsum$Forest,colsum$Ethnicity,colsum$Interaction)
+        X = cbind(rep(1,nobs),colsum$Population,colsum$urban,colsum$Elevation,colsum$OIL,
+                  colsum$FOREST,colsum$g1_02,colsum$interaction)
         simnegbindata = list(y=colsum$GOV_FIRE, X=X, beta=beta)
         Data1 = simnegbindata
         Mcmc1 = list(R=100000)
@@ -167,14 +158,14 @@ visreg2d(nb10,  "FOREST", "g1_02", type=c("conditional"),
         
         out = rnegbinRw(Data=Data1,Mcmc=Mcmc1)
         plot(out$betadraw)
-        denplot(betas, parms=c("Forest","Ethnicity", "Forest:Ethnicity"))
         betas<-as.matrix(out$betadraw)
         colnames(betas)[1:8] <- c("Intercept","Population(log)","Urban","Elevation","Oil",
                                   "Forest","Ethnicity","Forest:Ethnicity")
+        denplot(betas, parms=c("Forest","Ethnicity", "Forest:Ethnicity"))
+        caterplot(betas, parms=c("Population(log)","Urban","Elevation","Oil","Forest",
+                                 "Ethnicity", "Forest:Ethnicity"), 
+                  horizontal=T,labels.loc="above", denstrip=T)
         
-        caterplot(betas, parms=c("Population(log)","Urban","Elevation","Oil","Forest","Ethnicity", "Forest:Ethnicity"), horizontal=T,labels.loc="above", denstrip=T)
-        head(betas)
-        denplot(out$betadraw)
         
         betasdat<-as.data.frame(betas)
         forest<-betasdat[c(6)]
@@ -217,10 +208,13 @@ visreg2d(nb10,  "FOREST", "g1_02", type=c("conditional"),
           ## plotting examples
           plot(out$betadraw)
         }
+        
+        ##Table
+        
         beta.sims <- t(out$betadraw) # transpose of b2$beta
         apply(beta.sims, 1, quantile, probs = c(0.025, 0.975))
         apply(beta.sims, 1, mean)
-
+       
         
 
 ###Zero-Inflated Negative Binomial Models (not included in the publication)
